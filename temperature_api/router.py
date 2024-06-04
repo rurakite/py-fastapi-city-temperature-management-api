@@ -28,37 +28,15 @@ async def update_temperatures(db: Session = Depends(dependencies.get_db)):
         updated_temperatures = []
         for city in cities:
             try:
-                response = await client.get(
-                    f"http://api.weatherapi.com/v1/"
-                    f"current.json?key={API_KEY}&q={city.name}&aqi=no"
-                )
-                response.raise_for_status()
-                data = response.json()
-            except httpx.HTTPStatusError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Error fetching weather data for city {city.name}",
-                )
-            except httpx.RequestError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error requesting weather data: {str(exc)}",
-                )
-
-            temperature_data = schemas.TemperatureCreate(
-                city_id=city.id,
-                date_time=data["location"]["localtime"],
-                temperature=data["current"]["temp_c"],
-            )
-            try:
-                db_temperature = temperatures_crud.create_temperature(
-                    db, temperature_data
-                )
+                temperature_data = await temperatures_crud.fetch_city_temperature(client, city, API_KEY)
+                db_temperature = temperatures_crud.create_temperature(db, temperature_data)
                 updated_temperatures.append(db_temperature)
-            except Exception:
+            except HTTPException as exc:
+                raise exc
+            except Exception as exc:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Error creating temperature record",
+                    detail=f"Error creating temperature record for city {city.name}: {str(exc)}",
                 )
 
     return updated_temperatures
